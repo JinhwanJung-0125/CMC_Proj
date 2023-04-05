@@ -1,5 +1,3 @@
-namespace SetUnitPrice
-{
 const fs = require("fs");
 const AdmZip = require('adm-zip');
 const { buffer } = require("stream/consumers");
@@ -122,7 +120,5 @@ export class BidHandling
 //     fs.rmSync("C:\\\\Users\\joung\\OneDrive\\문서\\AutoBID" + "\\EmptyBid\\XmlToBID.BID");
 // }
 
-BidHandling.BidToJson();
+// BidHandling.BidToJson();
 //JsonToBid();
-
-}

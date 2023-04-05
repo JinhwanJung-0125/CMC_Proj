@@ -56,7 +56,7 @@ export class Data {
             return Math.floor(this.laborUnit * 10) / 10
         return this.laborUnit
     }
-    public set LavorUnit(value: number) {
+    public set LaborUnit(value: number) {
         this.laborUnit = value
     }
 
@@ -131,7 +131,7 @@ export class Data {
     public static FixedPricePercent: number //고정금액 비중
     public static ByProduct: number //작업설
 
-    public static Dic = new Map<string, Data>() //key : 세부공사별 번호 / value : 세부공사별 리스트
+    public static Dic = new Map<string, Data[]>() //key : 세부공사별 번호 / value : 세부공사별 리스트
     public static ConstructionNums = new Map<string, string>() //세부 공사별 번호 저장
     public static MatchedConstNum = new Map<string, string>() //실내역과 세부공사별 번호의 매칭 결과
 
