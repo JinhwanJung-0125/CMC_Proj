@@ -1,0 +1,10 @@
+{
+  "dependencies": {
+    "adm-zip": "^0.5.10",
+    "big.js": "^6.2.1",
+    "xml-js": "^1.6.11"
+  },
+  "devDependencies": {
+    "@types/node": "^18.15.11"
+  }
+}
