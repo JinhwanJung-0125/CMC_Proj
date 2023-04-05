@@ -1,4 +1,5 @@
 import { Data } from "./Data";
+import { FillCostAccount } from "./FillCostAccount"
 
 const fs = require('fs');
 const AdmZip = require('adm-zip');
@@ -154,29 +155,159 @@ export class CalculatePrice {
         console.log(this.targetRate);
     }
 
-    public static RoundOrTruncate(Rate: number, Object: Data, myMaterialUnit: number, myLaborUnit: number, myExpenseUnit: number): void {
+    public static RoundOrTruncate(Rate: number, Object: Data, refMyMaterialUnit: {value: number}, refMyLaborUnit: {value: number}, refMyExpenseUnit: {value: number}): void {
         if(Data.UnitPriceTrimming.localeCompare('1')){
-            myMaterialUnit = Math.trunc(Object.MaterialUnit * Rate * 10) / 10;
-            myLaborUnit = Math.trunc(Object.LaborUnit * Rate * 10) / 10;
-            myExpenseUnit = Math.trunc(Object.ExpenseUnit * Rate * 10) /10;
+            refMyMaterialUnit.value = Math.trunc(Object.MaterialUnit * Rate * 10) / 10;
+            refMyLaborUnit.value = Math.trunc(Object.LaborUnit * Rate * 10) / 10;
+            refMyExpenseUnit.value = Math.trunc(Object.ExpenseUnit * Rate * 10) /10;
         }
         else if(Data.UnitPriceTrimming.localeCompare('2')){
-            myMaterialUnit = Math.ceil(Object.MaterialUnit * Rate);
-            myLaborUnit = Math.ceil(Object.LaborUnit * Rate);
-            myExpenseUnit = Math.ceil(Object.ExpenseUnit * Rate);
+            refMyMaterialUnit.value = Math.ceil(Object.MaterialUnit * Rate);
+            refMyLaborUnit.value = Math.ceil(Object.LaborUnit * Rate);
+            refMyExpenseUnit.value = Math.ceil(Object.ExpenseUnit * Rate);
         }
     }
 
-    public static CheckLaborLimit80(Object: Data, myMaterialUnit: number, myLaborUnit: number, myExpenseUnit: number): void{
-        
+    public static CheckLaborLimit80(Object: Data, refMyMaterialUnit: {value: number}, refMyLaborUnit: {value: number}, refMyExpenseUnit: {value: number}): void{
+        if(Object.LaborUnit * 0.8 > refMyLaborUnit.value){
+            const deficiency: number = Object.LaborUnit * 0.8 - refMyLaborUnit.value;
+
+            if(refMyLaborUnit.value !== 0)
+                refMyMaterialUnit.value -= deficiency;
+            else if(refMyExpenseUnit.value !== 0)
+                refMyExpenseUnit.value -= deficiency;
+
+            refMyLaborUnit.value = Object.LaborUnit * 0.8;
+        }
     }
 
     public static Recalculation(): void {
+        const bidT3: object = this.eleBID['T3'];
+        let code: string;
+        let type: string;
+        this.exCount = 0;
+        this.exSum = 0;
+
+        for (let key in bidT3) {
+            code = JSON.stringify(bidT3[key]['C9']['_text']);
+            type = JSON.stringify(bidT3[key]['C5']['_text'])[1];
+
+            if (code !== undefined && type === 'S') {
+                let constNum: string = JSON.stringify(bidT3[key]['C1']['_text']).slice(1, -1);
+                let numVal: string = JSON.stringify(bidT3[key]['C2']['_text']).slice(1, -1);
+                let detailVal: string = JSON.stringify(bidT3[key]['C3']['_text']).slice(1, -1);
+                let curObject = Data.Dic.get(constNum).find(x => x.WorkNum === numVal && x.DetailWorkNum === detailVal);
+
+                if (curObject.Item.localeCompare('일반')) {
+                    Data.RealDirectMaterial -= +JSON.stringify(bidT3[key]['C20']['_text']).slice(1, -1);
+                    Data.RealDirectLabor -= +JSON.stringify(bidT3[key]['C21']['_text']).slice(1, -1);
+                    Data.RealOutputExpense -= +JSON.stringify(bidT3[key]['C22']['_text']).slice(1, -1);
+
+                    let targetPrice: number = (curObject.MaterialUnit + curObject.LaborUnit + curObject.ExpenseUnit) * this.targetRate;
+
+                    let myMaterialUnit = {value : 0};
+                    let myLaborUnit = {value: 0};
+                    let myExpenseUnit = {value: 0};
+                    let myPrice: number;
+
+                    if(Data.ZeroWeightDeduction.localeCompare('1')){
+                        if(curObject.Weight === 0 && curObject.LaborUnit === 0){
+                            curObject.MaterialUnit = Math.ceil(curObject.MaterialUnit * 0.5);
+                            curObject.ExpenseUnit = Math.ceil(curObject.ExpenseUnit * 0.5);
+
+                            bidT3[key]['C16']['_text'] = curObject.MaterialUnit.toString();
+                            bidT3[key]['C17']['_text'] = curObject.LaborUnit.toString();
+                            bidT3[key]['C18']['_text'] = curObject.ExpenseUnit.toString();
+                            bidT3[key]['C19']['_text'] = curObject.UnitPriceSum.toString();
+                            bidT3[key]['C20']['_text'] = curObject.Material.toString();
+                            bidT3[key]['C21']['_text'] = curObject.Labor.toString();
+                            bidT3[key]['C22']['_text'] = curObject.Expense.toString();
+                            bidT3[key]['C23']['_text'] = curObject.PriceSum.toString();
+
+                            Data.RealDirectMaterial += +JSON.stringify(bidT3[key]['C20']['_text']).slice(1, -1);
+                            Data.RealDirectLabor += +JSON.stringify(bidT3[key]['C21']['_text']).slice(1, -1);
+                            Data.RealOutputExpense += +JSON.stringify(bidT3[key]['C22']['_text']).slice(1, -1);
+
+                            continue;
+                        }
+                        else{
+                            this.RoundOrTruncate(this.targetRate, curObject, myMaterialUnit, myLaborUnit, myExpenseUnit);
+                            this.CheckLaborLimit80(curObject, myMaterialUnit, myLaborUnit, myExpenseUnit);
+                        }
+                    }
+                    else if(Data.ZeroWeightDeduction.localeCompare('2')){
+                        this.RoundOrTruncate(this.targetRate, curObject, myMaterialUnit, myLaborUnit, myExpenseUnit);
+                        this.CheckLaborLimit80(curObject, myMaterialUnit, myLaborUnit, myExpenseUnit);
+                    }
+
+                    myPrice = myMaterialUnit.value + myLaborUnit.value + myExpenseUnit.value;
+
+                    if(Data.LaborCostLowBound.localeCompare('1')){
+                        let Excess: number = myPrice - targetPrice;
+                        let laborExcess: number = myLaborUnit.value - curObject.LaborUnit * 0.8;
+                        laborExcess = Math.trunc(laborExcess * 10) / 10;
+
+                        if(laborExcess > 0){
+                            if(myExpenseUnit.value !== 0){
+                                myLaborUnit.value -= laborExcess;
+                                myExpenseUnit.value += laborExcess + Excess;
+                            }
+                            else{
+                                if(myMaterialUnit.value !== 0){
+                                    myLaborUnit.value -= laborExcess;
+                                    myMaterialUnit.value += laborExcess + Excess;
+                                }
+                                else{
+                                    myLaborUnit.value -= laborExcess;
+                                    myExpenseUnit.value += laborExcess + Excess;
+                                }
+                            }
+                        }
+                        else if(laborExcess < 0){
+                            myLaborUnit.value = curObject.LaborUnit * 0.8;
+
+                            if(myMaterialUnit.value !== 0){
+                                myMaterialUnit.value += laborExcess + Excess;
+                            }
+                            else{
+                                myExpenseUnit.value += laborExcess + Excess;
+                            }
+                        }
+                    }
+
+                    curObject.MaterialUnit = myMaterialUnit.value;
+                    curObject.LaborUnit = myLaborUnit.value;
+                    curObject.ExpenseUnit = myExpenseUnit.value;
+
+                    bidT3[key]['C16']['_text'] = curObject.MaterialUnit.toString();
+                    bidT3[key]['C17']['_text'] = curObject.LaborUnit.toString();
+                    bidT3[key]['C18']['_text'] = curObject.ExpenseUnit.toString();
+                    bidT3[key]['C19']['_text'] = curObject.UnitPriceSum.toString();
+                    bidT3[key]['C20']['_text'] = curObject.Material.toString();
+                    bidT3[key]['C21']['_text'] = curObject.Labor.toString();
+                    bidT3[key]['C22']['_text'] = curObject.Expense.toString();
+                    bidT3[key]['C23']['_text'] = curObject.PriceSum.toString();
+
+                    Data.RealDirectMaterial += +JSON.stringify(bidT3[key]['C20']['_text']).slice(1, -1);
+                    Data.RealDirectLabor += +JSON.stringify(bidT3[key]['C21']['_text']).slice(1, -1);
+                    Data.RealOutputExpense += +JSON.stringify(bidT3[key]['C22']['_text']).slice(1, -1);
+                }
+                else if(curObject.Item === '제요율적용제외'){
+                    curObject.MaterialUnit = Math.trunc(curObject.MaterialUnit * this.targetRate * 10) / 10;
+                    curObject.LaborUnit = Math.trunc(curObject.LaborUnit * this.targetRate * 10) / 10;
+                    curObject.ExpenseUnit = Math.trunc(curObject.ExpenseUnit * this.targetRate * 10) / 10;
+
+                    this.exSum += curObject.PriceSum;
+                    this.exCount++;
+                }
+            }
+        }
 
     }
 
     public static SetExcludingPrice(): void {
-
+        let TempInvestDirectSum: number = Data.Investigation['직공비'];
+        let TempRealDirectSum: number = FillCostAccount.ToLong(Data.RealDirectMaterial + Data.RealDirectLabor + Data.RealOutputExpense); 
     }
 
     public static GetAdjustedExcludePrice(): void {
