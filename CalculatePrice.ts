@@ -180,7 +180,9 @@ export class CalculatePrice {
         let weight: number;
         let maxWeight: number = 0;
         let weightSum: number = 0;
-        let max: Data = new Data();
+        //Data 인스턴스 생성시 생성자 함수로 프로퍼티 값을 설정하는 것으로 변경
+        //->max를 빈 변수로 선언한 뒤 후에 Data인스턴스를 넣도록 수정
+        let max
 
         Data.Dic.forEach((value, _) => {
             for (let idx in value) {

@@ -42,7 +42,7 @@ export class BidHandling {
     public static JsonToBid() {
         const resultFilePath = "C:\\\\Users\\joung\\OneDrive\\문서\\AutoBID\\OutputDataFromBID.json";
         const json = fs.readFileSync(resultFilePath, 'utf-8'); // json파일 읽기
-        const xml = convert.json2xml(json, { compact: true, ignoreComment: true, space: 4 }); // json파일을 xml파일로 교체
+        const xml = convert.json2xml(json, { compact: true, ignoreComment: true, spaces: 4 }); // json파일을 xml파일로 교체
 
         fs.writeFileSync("C:\\\\Users\\joung\\OneDrive\\문서\\AutoBID" + "\\Result_Xml.xml", xml); // xml파일 형식으로 다시 쓰기
 
